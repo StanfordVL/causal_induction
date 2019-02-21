@@ -70,13 +70,14 @@ class LightingEnv(gym.GoalEnv):
         info = {
             'is_success': self._is_success(obs, self.goal),
         }
-        done = self._is_success(obs, self.goal)
+#         done = self._is_success(obs, self.goal)
         reward = self.compute_reward(obs, info)
         self.steps += 1
         self.rew += reward
-        if done or (self.steps >= self.horizon):
-            print(self.rew)
-            with open("/Users/surajnair/Documents/stanford/causal_induction/rew.txt", "a") as f:
+        if (self.steps >= self.horizon):
+#             print(self.rew)
+            done = True
+            with open("./rew_ppo_novf.txt", "a") as f:
                 f.write(str(self.rew) + "\n")
             self.reset()
         return obs, reward, done, info
@@ -126,11 +127,19 @@ class LightingEnv(gym.GoalEnv):
     
     def compute_reward(self, obs, info=None):
 #         print(obs.shape, goal.shape)
-#         return -1 * np.sqrt(((obs[:,:,:3] - self.goal)**2).sum())
-        if (obs[:,:,:3]==self.goal).all():
-            return 0
-        else:
-            return -1
+        currstate= copy.deepcopy(self.sim.model.light_active)
+        rew = 1 - np.tanh(np.mean((currstate-self.lighting_goal)**2)) #np.sqrt(((currstate - self.lighting_goal)**2).sum())
+#         rew =-1 * np.sqrt(((obs[:,:,:3] - self.goal)**2).sum())
+#         import cv2
+#         cv2.imwrite('goal.png', self.goal*255)
+#         cv2.imwrite('obs.png', obs[:,:,:3]*255)
+#         print(rew)
+#         assert(False)
+#         if (obs[:,:,:3]==self.goal).all():
+#             return 0
+#         else:
+#             return -1
+        return rew
 
     # Extension methods
     # ----------------------------
@@ -158,7 +167,7 @@ class LightingEnv(gym.GoalEnv):
     def _get_obs(self):
         """Returns the observation.
         """
-        im = self.sim.render(width=64,height=64,camera_name="bottomview") / 255.0
+        im = self.sim.render(width=64,height=64,camera_name="birdview") / 255.0
         if self.gc:
             t = np.concatenate([im, self.goal], 2)
         else:
@@ -175,7 +184,11 @@ class LightingEnv(gym.GoalEnv):
     def _is_success(self, obs, desired_goal):
         """Indicates whether or not the achieved goal successfully achieved the desired goal.
         """
-        return (obs[:,:,:3]==desired_goal).all()
+        currstate= copy.deepcopy(self.sim.model.light_active)
+#         print(currstate, self.lighting_goal)
+        return (currstate == self.lighting_goal).all()
+#         assert(False)
+#         return (obs[:,:,:3]==desired_goal).all()
 
     def _sample_goal(self):
         """Samples a new goal and returns it.
@@ -197,7 +210,8 @@ class LightingEnv(gym.GoalEnv):
             self.sim.model.light_active[id3] = (np.random.uniform() < 0.5)*1
             self.sim.model.light_active[id4] = (np.random.uniform() < 0.5)*1
             self.sim.model.light_active[id5] = (np.random.uniform() < 0.5)*1
-        return self.sim.render(width=64,height=64,camera_name="bottomview") / 255.0
+        self.lighting_goal = copy.deepcopy(self.sim.model.light_active)
+        return self.sim.render(width=64,height=64,camera_name="birdview") / 255.0
 
     def _env_setup(self, initial_qpos):
         """Initial configuration of the environment. Can be used to configure initial state
