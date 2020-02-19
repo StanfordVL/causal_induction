@@ -11,8 +11,7 @@ import cv2
         
 class ImageEncoder(nn.Module):
     """
-    Base Class for a SRL network (autoencoder family)
-    It implements a getState method to retrieve a state from observations
+    IMage Encoder
     """
     def __init__(self, num):
         super(ImageEncoder, self).__init__()
@@ -38,10 +37,6 @@ class ImageEncoder(nn.Module):
         self.sigmoid = nn.Sigmoid()
         
     def forward(self, x):
-        """
-        :param x: (th.Tensor)
-        :return: (th.Tensor)
-        """
         e1 = self.encoder_conv(x)
         e2 = self.encoder_conv2(e1)
         e3 = self.encoder_conv3(e2)
@@ -76,10 +71,6 @@ class IterativeModelAttention(nn.Module):
 
         self.fc4 = nn.Linear(self.attnsize*self.outsize, self.attnsize + num)
         
-        # self.cnn1 = nn.Conv1d(2*num+1, 256, kernel_size=3, padding=1)
-        # self.cnn2 = nn.Conv1d(256, 128, kernel_size=3, padding=1)
-        # self.cnn3 = nn.Conv1d(128, 128, kernel_size=3, padding=1)
-
         self.dp = nn.Dropout(0.3)
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
@@ -88,7 +79,6 @@ class IterativeModelAttention(nn.Module):
     def forward(self, s, a):
         if self.images:
             s_im = s.view(-1, 32, 32, 3).permute(0,3,1,2)
-#             sp = sp.permute(0,3,1,2)
             senc = self.ie(s_im)
             sp = senc.view(-1, self.horizon, self.num)
         else:
@@ -99,40 +89,22 @@ class IterativeModelAttention(nn.Module):
         
         
         p = th.zeros((sp.size(0), self.attnsize, self.outsize)).cuda()
-#         print(p[0])
         for i in range(self.horizon):
-#             print(p.size(), e.size())
-            inn = e[:,i,:] #th.cat([p.view(sp.size(0), -1), e[:,i,:]], 1)
-#             print(inn[0])
+            inn = e[:,i,:]
             e1 = self.relu(self.dp(self.fc1(inn)))
             e2 = self.relu(self.dp(self.fc2(e1)))
             e3 = self.fc3(e2)
-            # print(e3.size())
 
             atn = self.softmax(e3[:, :self.attnsize]).unsqueeze(-1)
-            # print(atn.size())
             e3 = self.sigmoid(e3[:, self.attnsize:].unsqueeze(1).repeat(1, self.attnsize, 1))
-            # print(e3.size())
-#             print(atn[0])
-#             print(e3[0])
             r = atn * e3
-#             print(atn.size())
-#             print(e3.size())
-#             print(r.size())
-            # assert(False)  
-#             if np.random.uniform() < .001:
-#                 print(atn[0], e3[0])
             p = p + r
-#             print(p[0])
-        # print(p.size())
         
         e3 = self.fc4(p.view(-1, self.attnsize*self.num))
         atn = self.softmax(e3[:, :self.attnsize]).unsqueeze(-1)
-        # print(atn.size())
         e3 = self.sigmoid(e3[:, self.attnsize:].unsqueeze(1).repeat(1, self.attnsize, 1))
         r = atn * e3
         p = p + r
-#         print(p[0])
         p = p.view(-1, self.attnsize*self.num)
         
 
@@ -172,15 +144,8 @@ class IterativeModel(nn.Module):
     def forward(self, s, a):
         if self.images:
             s_im = s.view(-1, 32, 32, 3).permute(0,3,1,2)
-#             sp = sp.permute(0,3,1,2)
             senc = self.ie(s_im)
             sp = senc.view(-1, self.horizon, self.num)
-#             print(sp.size())
-#             assert(False)
-#             print(sp.shape)
-#             for tr in range(self.horizon):
-#                 cv2.imwrite("test"+str(tr)+".png", sp[0,tr].detach().cpu().numpy()*255)
-#             assert(False)
         else:
             sp = s.view(-1, self.horizon, self.num)
         sp[:,1:] = sp[:,1:] - sp[:,:-1]
@@ -189,9 +154,6 @@ class IterativeModel(nn.Module):
         
         e = e.permute(0,2,1)
         c2 = e
-#         c1 = self.relu(self.cnn1(e))
-#         c2 = self.relu(self.cnn2(c1))
-#         c2 = self.relu(self.cnn3(c2))
         
         p = th.zeros((sp.size(0), self.outsize)).cuda()
         for i in range(self.horizon):
@@ -200,7 +162,6 @@ class IterativeModel(nn.Module):
             e3 = self.sigmoid(self.fc3(e2))    
             p = p + e3
         p = self.sigmoid(self.fc4(p))
-#         print(p)
 
         return p
     
@@ -236,15 +197,8 @@ class SupervisedModelCNN(nn.Module):
     def forward(self, s, a):
         if self.images:
             s_im = s.view(-1, 32, 32, 3).permute(0,3,1,2)
-#             sp = sp.permute(0,3,1,2)
             senc = self.ie(s_im)
             sp = senc.view(-1, self.horizon, self.num)
-#             print(sp.size())
-#             assert(False)
-#             print(sp.shape)
-#             for tr in range(self.horizon):
-#                 cv2.imwrite("test"+str(tr)+".png", sp[0,tr].detach().cpu().numpy()*255)
-#             assert(False)
         else:
             sp = s.view(-1, self.horizon, self.num)
         a = a.view(-1, self.horizon, self.num+1)
