@@ -1,10 +1,5 @@
 from env.light_env import LightEnv
-# from env.meta_env import MetaEnv
 import numpy as np
-# from stable_baselines.common.policies import CnnPolicy, CnnLstmPolicy, MlpLstmPolicy, MlpPolicy
-# from stable_baselines.common.policies import MlpLstmPolicyCustomTConv, MlpLstmPolicyDM, MlpLstmPolicyTraj, MlpLstmPolicyMix
-# from stable_baselines.common.vec_env import DummyVecEnv
-# from stable_baselines import A2C, ACER, PPO2, TRPO
 import argparse
 import torch as th
 import torch.nn as nn
@@ -15,8 +10,7 @@ import cv2
         
 class BCPolicy(nn.Module):
     """
-    Base Class for a SRL network (autoencoder family)
-    It implements a getState method to retrieve a state from observations
+    Imitation Policy
     """
     def __init__(self, num, structure, attention = False):
         super(BCPolicy, self).__init__()
@@ -57,31 +51,17 @@ class BCPolicy(nn.Module):
             self.gfc1 = nn.Linear(self.num, 128)
             
             
-#         self.gfc2 = nn.Linear(128, 128)
-#         self.gfc3 = nn.Linear(128, 128)
-#         self.gfc4 = nn.Linear(128, 128)
- 
         if self.structure == "masterswitch":
             self.fc2 = nn.Linear(256+args.num, 64)
         else:
             self.fc2 = nn.Linear(256, 64)
-#         self.fc3 = nn.Linear(256, 128)
-#         self.fc4 = nn.Linear(128, 64)
         self.fc5 = nn.Linear(64, num)
 
         self.softmax = nn.Softmax(dim=-1)
         self.relu = nn.ReLU()
         
     def forward(self, x, gr):
-        """
-        :param x: (th.Tensor)
-        :return: (th.Tensor)
-        """
         
-#         g1 = self.relu(self.gfc2(g1))
-#         g1 = self.relu(self.gfc3(g1))
-#         g1 = self.relu(self.gfc4(g1))
-
         x = x.permute(0, 3, 1, 2).contiguous()
 
         e1 = self.encoder_conv(x)
@@ -107,16 +87,13 @@ class BCPolicy(nn.Module):
         else:
             eout = th.cat([g1, encoding], 1)
         a = self.relu(self.fc2(eout))
-#         a = self.relu(self.fc3(a))
-#         a = self.relu(self.fc4(a))
         a = self.fc5(a)
         return a
     
     
 class BCPolicyMemory(nn.Module):
     """
-    Base Class for a SRL network (autoencoder family)
-    It implements a getState method to retrieve a state from observations
+    Imitation policy with memory
     """
     def __init__(self, num, structure):
         super(BCPolicyMemory, self).__init__()
@@ -155,10 +132,6 @@ class BCPolicyMemory(nn.Module):
         self.relu = nn.ReLU()
         
     def forward(self, x, a, hidden):
-        """
-        :param x: (th.Tensor)
-        :return: (th.Tensor)
-        """
         x = x.permute(0, 3, 1, 2).contiguous()
         e1 = self.encoder_conv(x)
         e2 = self.encoder_conv2(e1)
@@ -179,6 +152,7 @@ class BCPolicyMemory(nn.Module):
 
 
 def induction(structure, num, horizon, l, images=False):
+    '''Roll out heurisitc interaction policy'''
     ##### INDUCTION #####
     ##### OPTIMAL POLICY 1 
     if structure == "masterswitch":
@@ -246,13 +220,16 @@ def induction(structure, num, horizon, l, images=False):
         buf = epbuf
     return buf
 
+
 def predict(buf, F, structure, num):
+    '''Predict graph'''
     s = th.FloatTensor(buf[:,:-(num+1)]).float().cuda()
     a = th.FloatTensor(buf[:,-(1+num):]).float().cuda()
     predgt = th.clamp(F(s, a), 0, 1)
     return predgt.cpu().detach().numpy().flatten()
     
 def train_bc(memory, policy, opt):
+    '''Train Imitation policy'''
     if len(memory['state']) < 50:
         return
     opt.zero_grad()
@@ -275,6 +252,7 @@ def train_bc(memory, policy, opt):
     return l
 
 def train_bclstm(trajs, policy, opt):
+    '''Train imitation policy with memory'''
     if len(trajs) < 10:
         return
     celoss = nn.CrossEntropyLoss()
@@ -284,7 +262,7 @@ def train_bclstm(trajs, policy, opt):
     for t in choices:
         memory = trajs[t]
         hidden = None
-        
+        ## Feed interaction trajectory through policy with memory
         buf = memory['graph'][0]
         for w in range(buf.shape[0]):
             states = buf[w, :32*32*3].reshape(1, 32, 32, 3)
@@ -311,9 +289,11 @@ def train_bclstm(trajs, policy, opt):
     return l
 
 def eval_bc(policy, l, train=True, f=None, args=None):
+    '''Evaluate imation policy'''
     successes = []
     l.keep_struct = False
     l.train = train
+    # Eval over 100 trials
     for mep in range(100):
         obs = l.reset()
         imobs = np.expand_dims(l._get_obs(images=True), 0)
@@ -331,13 +311,6 @@ def eval_bc(policy, l, train=True, f=None, args=None):
             l.gt = pred
             graph = np.expand_dims(pred.flatten(), 0)
             
-        # print(goalim.shape)
-        # print(l.aj.shape)
-        if (mep == 50) and (train):
-            print(l.goal)
-            print(l.aj)
-#             print(l.ms)
-
         for k in range(args.horizon * 2):
             st = np.concatenate([imobs, goalim], 3)
             act = policy(th.FloatTensor(st).cuda(), th.FloatTensor(graph).cuda())
@@ -351,10 +324,10 @@ def eval_bc(policy, l, train=True, f=None, args=None):
                 break
 
         successes.append(l._is_success(obs))
-        # assert(False)
     return np.mean(successes)
 
 def eval_bclstm(policy, l, train=True, args=None):
+    '''Evaluate imitation policy with memory'''
     successes = []
     l.keep_struct = False
     l.train = train
@@ -374,10 +347,6 @@ def eval_bclstm(policy, l, train=True, args=None):
             actions = buf[w, 32*32*3:].reshape(1, -1)
             num_acts = actions.shape
             act, hidden = policy(th.FloatTensor(states).cuda(), th.FloatTensor(actions).cuda(), hidden)
-
-        if (mep == 50) and (train):
-            print(l.goal)
-            print(l.aj)
 
         for k in range(args.horizon * 2):
             st = np.concatenate([imobs, goalim], 3)
@@ -399,15 +368,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Causal Meta-RL')
     parser.add_argument('--fixed-goal', type=int, default=0, help='fixed goal or no')
     parser.add_argument('--horizon', type=int, default=10, help='Env horizon')
-    parser.add_argument('--num', type=int, default=1, help='K* horiscrzon induction phase')
-    parser.add_argument('--structure', type=str, default="one_to_one", help='K* horiscrzon induction phase')
-    parser.add_argument('--method', type=str, default="traj", help='K* horiscrzon induction phase')
-    parser.add_argument('--seen', type=int, default=10, help='K* horiscrzon induction phase')
-    parser.add_argument('--images', type=int, default=0, help='K* horiscrzon induction phase')
+    parser.add_argument('--num', type=int, default=1, help='num lights')
+    parser.add_argument('--structure', type=str, default="one_to_one", help='causal structure')
+    parser.add_argument('--method', type=str, default="traj", help='Type of model')
+    parser.add_argument('--seen', type=int, default=10, help='Num see envs')
+    parser.add_argument('--images', type=int, default=0, help='Images or no')
+    parser.add_argument('--data-dir', type=str, help='Model path')
+
     args = parser.parse_args()
     
     gc = 1 - args.fixed_goal
-    fname = "bcexp/polattn_"+str(gc)+"_"+args.method
+    fname = args.data_dir+"polattn_"+str(gc)+"_"+args.method
 
     memsize = 10000
     memory = {'state':[], 'graph':[], 'action':[]}
@@ -417,6 +388,7 @@ if __name__ == '__main__':
         pol = BCPolicy(args.num, args.structure, True).cuda()
     optimizer = th.optim.Adam(pol.parameters(), lr=0.0001)
 
+    ## Using ground truth graph
     if args.method == "gt":
         l = LightEnv(args.horizon*2, 
                  args.num, 
@@ -429,6 +401,7 @@ if __name__ == '__main__':
         successes = []
         l.keep_struct = False
         l.train = True
+        ## Per episode
         for mep in range(100000):
             l.train = True
             obs = l.reset()
@@ -439,7 +412,9 @@ if __name__ == '__main__':
             goalim = l.goalim
                     
             goal = l.goal
+            ## Steps in episode
             for k in range(args.horizon*2):
+                ## Use GT graph to plan
                 g = np.abs(goal - obs[:args.num])
                 st = np.concatenate([imobs, goalim], 2)
                 sss = 1.0*(np.dot(g, l.aj.T).T > 0.5)
@@ -457,6 +432,7 @@ if __name__ == '__main__':
                 memory['graph'].append(l.gt.flatten())
                 memory['action'].append(action)
                 
+                ## Random noise to policy
                 if np.random.uniform() < 0.3:
                     action = np.random.randint(args.num)
                 else:
@@ -480,7 +456,6 @@ if __name__ == '__main__':
                     memory['graph'].append(l.gt.flatten())
                     memory['action'].append(l.ms)
                     obs, reward, done, info = l.step(l.ms)
-#             assert(l._is_success(obs))
             memory['state'] = memory['state'][-memsize:]
             memory['graph'] = memory['graph'][-memsize:]
             memory['action'] = memory['action'][-memsize:]
@@ -504,6 +479,7 @@ if __name__ == '__main__':
         
             successes.append(l._is_success(obs))
         print(np.mean(successes))
+    ## If using learning induction model
     elif (args.method == "trajF") or (args.method == "trajFi") or (args.method == "trajFia"):
         if args.structure == "masterswitch":
             st = (args.horizon*(2*args.num+1) + (args.horizon-1)*(2*args.num+1))
@@ -511,12 +487,12 @@ if __name__ == '__main__':
             st = (args.horizon*(2*args.num+1))
         tj = "gt"
         l = LightEnv(args.horizon*2, 
-                 args.num, 
-                 tj,
-                 args.structure, 
-                 gc, 
-                 filename=fname,
-                    seen = args.seen)
+                    args.num, 
+                     tj,
+                     args.structure, 
+                     gc, 
+                     filename=fname,
+                     seen = args.seen)
 
         if args.images:
             addonn = "_I1"
@@ -524,13 +500,13 @@ if __name__ == '__main__':
             addonn = ""
     
         if args.method == "trajF":
-            FN = th.load("saved_models/cnn_Redo_L2_S"+str(args.seen)+"_h"+str(args.horizon)+\
+            FN = th.load(args.data_dir+"cnn_Redo_L2_S"+str(args.seen)+"_h"+str(args.horizon)+\
                         "_"+str(args.structure)+addonn).cuda()
         elif args.method == "trajFia":
-            FN = th.load("saved_models/iter_attn_Redo_L2_S"+str(args.seen)+"_h"+str(args.horizon)+\
+            FN = th.load(args.data_dir+"iter_attn_Redo_L2_S"+str(args.seen)+"_h"+str(args.horizon)+\
                         "_"+str(args.structure)+addonn).cuda()
         else:
-            FN = th.load("saved_models/iter_Redo_L2_S"+str(args.seen)+"_h"+str(args.horizon)+\
+            FN = th.load(args.data_dir+"iter_Redo_L2_S"+str(args.seen)+"_h"+str(args.horizon)+\
                         "_"+str(args.structure)+addonn).cuda()
         FN = FN.eval()
         successes = []
@@ -542,22 +518,18 @@ if __name__ == '__main__':
             goalim = l.goalim
             imobs = l._get_obs(images=True)
             
+            ## Predict Graph
             buf = induction(args.structure,args.num, args.horizon, l, images=args.images)
             traj = buf.flatten()
             pred = predict(buf, FN,args.structure, args.num)
             l.state = np.zeros((args.num))
-
-#             if args.structure == "masterswitch":
-#                 mp = pred[:(args.num * args.num)].reshape((args.num,args.num))
-#                 ms = np.argmax(pred[(args.num * args.num):])
-#             else:
-#                 mp = pred.reshape((args.num,args.num))
             
             curr = np.zeros((args.num))
             obs = curr
                     
             goal = l.goal
             for k in range(args.horizon*2):
+                ## Planning
                 g = np.abs(goal - obs[:args.num])
                 st = np.concatenate([imobs, goalim], 2)
                 sss = 1.0*(np.dot(g, l.aj.T).T > 0.5)
@@ -575,6 +547,7 @@ if __name__ == '__main__':
                 memory['graph'].append(pred.flatten())
                 memory['action'].append(action)
                 
+                ## Random Noise
                 if np.random.uniform() < 0.3:
                     action = np.random.randint(args.num)
                 else:
@@ -656,7 +629,7 @@ if __name__ == '__main__':
             goalim = l.goalim
             imobs = l._get_obs(images=True)
             
-            
+            ## Get interction trajectory
             buf = induction(args.structure,args.num, args.horizon, l, images=args.images)
             memory['graph'].append(buf)
             for w in range(buf.shape[0]):
@@ -672,6 +645,7 @@ if __name__ == '__main__':
                     
             goal = l.goal
             for k in range(args.horizon*2):
+                ## Planning
                 g = np.abs(goal - obs[:args.num])
                 st = np.concatenate([imobs, goalim], 2)
                 sss = 1.0*(np.dot(g, l.aj.T).T > 0.5)
@@ -688,6 +662,7 @@ if __name__ == '__main__':
                 memory['state'].append(st)
                 memory['action'].append(action)
                 
+                ## Policy Noise
                 if np.random.uniform() < 0.3:
                     action = np.random.randint(args.num)
                 else:
@@ -710,9 +685,8 @@ if __name__ == '__main__':
                     memory['action'].append(l.ms)
                     obs, reward, done, info = l.step(l.ms)
 
-#             memory['state'] = memory['state'][-memsize:]
-#             memory['graph'] = memory['graph'][-memsize:]
-#             memory['action'] = memory['action'][-memsize:]
+
+                    
             if len(memory['state']) != 0:
                 trajs.append(memory)
             trajs = trajs[-memsize:]

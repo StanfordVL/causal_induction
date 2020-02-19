@@ -73,12 +73,6 @@ class LightEnv(gym.GoalEnv):
         self.action_space = spaces.Discrete(self.num+1)
         self.observation_space = spaces.Box(0, 1, shape=obs.shape, dtype='float32')
 
-        # render_context = mujoco_py.MjRenderContextOffscreen
-        # self.sim.add_render_context(render_context)
-        # self.sim._render_context_offscreen.vopt.geomgroup[0] = 0
-        # self.sim._render_context_offscreen.vopt.geomgroup[1] = 1
-        # self.viewer = MujocoPyRenderer(self.sim)
-
 
     # Env methods
     # ----------------------------
@@ -124,7 +118,6 @@ class LightEnv(gym.GoalEnv):
             if reward == 0:
                 done = True
             if (self.steps >= self.horizon):
-#                 print(np.mean(1*self.correct))
                 done = True
             # if done:
             #     with open(self.filename + "_S" + str(self.seen) + "_"+str(self.structure)+"_H"+str(self.horizon)+"_N"+str(self.num)+"_T"+str(self.current_cs)+".txt", "a") as f:
@@ -207,8 +200,6 @@ class LightEnv(gym.GoalEnv):
         if images:
             self.sim.model.light_active[:] = light
             im = self.sim.render(width=32,height=32,camera_name="birdview") / 255.0
-            # im = self.viewer.render()
-#             cv2.imwrite("test.png", (255*im).astype(np.uint8))
             return im
 
         if self.gc:    

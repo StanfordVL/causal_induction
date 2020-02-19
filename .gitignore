@@ -1,2 +1,6 @@
 ppo_lighting_tb/
 .ipynb_checkpoints/
+*.pyc
+data/
+figs*
+exp*
