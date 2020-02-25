@@ -6,7 +6,7 @@ Consists of the light switch environment for studying visual causal induction, w
 
 ## Induction Models
 
-The different induction models used are located under `F_models.ph`, incuding our proposed iterative attention network, as well as baselines which do not use attention or use temporal convolutions. 
+The different induction models used are located under `F_models.py`, incuding our proposed iterative attention network, as well as baselines which do not use attention or use temporal convolutions. 
 
 ## Reproducing Experiments
 
