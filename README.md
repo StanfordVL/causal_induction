@@ -1,4 +1,4 @@
-Code for ICML 2020 Submission: Causal Induction From Visual Observations for Goal-Directed Tasks
+Code for [Causal Induction From Visual Observations for Goal-Directed Tasks](https://arxiv.org/pdf/1910.01751.pdf).
 
 Step 1: Generate Data
 
