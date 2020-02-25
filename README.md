@@ -1,4 +1,14 @@
-Code for [Causal Induction From Visual Observations for Goal-Directed Tasks](https://arxiv.org/pdf/1910.01751.pdf).
+# Code and Environment for [Causal Induction From Visual Observations for Goal-Directed Tasks](https://arxiv.org/pdf/1910.01751.pdf).
+
+## Environment
+
+Consists of the light switch environment for studying visual causal induction, where N switches control N lights, under various causal structures. Includes common cause, common effect, and causal chain relationships. Environment code resides under `env/light_env.py`.
+
+## Induction Models
+
+The different induction models used are located under `F_models.ph`, incuding our proposed iterative attention network, as well as baselines which do not use attention or use temporal convolutions. 
+
+## Reproducing Experiments
 
 Step 1: Generate Data
 
